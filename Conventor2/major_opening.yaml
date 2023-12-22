@@ -1,0 +1,53 @@
+conventions:
+    1M: 
+        define: 
+            primary_suit: $M
+        description: 5+ $M, 10-15 HCP.
+    
+        /1NT!!:
+            description: Forcing
+            /:
+                2C/P: To play, likely 6+ !C
+                ? - 2C / 2D
+                  - 2C|2D / 2H
+                : To play, 5+ $0
+                2X / 2M: 2-3 $M, trash raise
+            
+            X - XX: Any invitational hand
+            X - 2C: Natural drop
+
+    1H/1NT/2C!!: Could be as short as one club (when exactly 4=5=3=1 shape).
+    1H/1NT/2C|2D|2H/2S: <b>Possible Spade</b>. 6+ S, 2 H. Invitational.
+  
+    1M/2C!:
+        description: |
+            Artificial. Game forcing. 2+ C.
+            This bid can also contain balanced hands with 5 D at the bidder's discretion.
+        /: 
+            2D!: Default rebid. Denies 4 $OM
+            2H: 4 H. Can still have 6 S
+            2S: 4 S. Can still have 6 H
+            2M: 6 $M. Denies 4 $OM
+            2NT: "{5$M - 0$OM - 4D - 4C}"
+        
+    ? - 1H - 1S
+      - 1M - X
+    : 
+        description:  Transfers on.
+
+        XX!!: 4+ S. Forcing 1 round.
+        1NT!!: Clubs, Invitational+. May be as few as 3, if making a game try in  $M
+        2C!!: Diamonds, Invitational+. May be as few as 3, if making a game try in  $M
+
+    ? [ 
+        1H - 1S - X!,
+        1H - X - 1S!,
+        1S - X - XX!,
+    ]
+    :
+        description: |
+            Encourages opener to rebid 1NT. 
+            
+            Should be described as "hands looking to signoff, or needing to ask specific questions."
+
+            Opener rebids 1NT with any holding that lacks a non-reverse natural 2 level 4 card suit rebid.

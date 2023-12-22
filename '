@@ -1,0 +1,113 @@
+using System;
+using System.Collections;
+using System.Collections.Generic;
+using System.Linq;
+using System.Text;
+using System.Threading.Tasks;
+
+namespace Conventor2; 
+public class ConventionParser {
+    private int yamlConventionCount = 0;
+
+    public static void ParseConventions(string path) {
+        dynamic parsedYaml;
+        using (var stream = new FileStream(path, FileMode.Open)) {
+            parsedYaml = new DeserializerBuilder().Build().Deserialize<Dictionary<string, object>>(new StreamReader(stream));
+        }
+
+        RootConvention = Convention.FromYamlObject(parsedYaml);
+        RootConvention.FullyExpandChildren();
+        RootConvention.TrimIllegalSequences();
+
+    }
+
+    public static Convention? RootConvention { get; private set; } = null;
+
+    public static Convention? GetConvention(string biddingSequence) {
+        return RootConvention?.GetConvention(biddingSequence.Split("-"));
+    }
+
+    public Convention FromYamlObject(IDictionary yamlObject, Convention? parent = null, bool impliedPass = false) {
+        if (parent == null) {
+            parent = new Convention(null, "");
+        }
+
+        List<List<string>> lastSequences = [];
+        foreach (var yamlPair in yamlObject) {
+            if (yamlPair is not DictionaryEntry) {
+                continue;
+            }
+
+            var yamlEntry = (DictionaryEntry)yamlPair;
+            _ = yamlEntry switch {
+                { Key: "define", Value: IDictionary yamlValue } => processMacros(yamlValue),
+                { Key: "conventions" or ".", Value: IList yamlConventions } => processConventions(yamlConventions, false),
+                { Key: "/", Value: IList yamlConventions } => processConventions(yamlConventions, true),
+                { Key: string biddingSequence, Value: string yamlDescription } => processConventionSingle(biddingSequence, new Dictionary<string, object> {
+                    ["description"] = yamlDescription, 
+                }),
+                { Key: string biddingSequence, Value: IDictionary yamlDict } => processConventionSingle(biddingSequence, yamlDict),
+                _ => 0,
+            };
+        }
+        return parent;
+
+        int processMacros(IDictionary yamlMacros) {
+            foreach (var yamlKey in yamlMacros.Keys) {
+                if (yamlKey == null) {
+                    continue;
+                }
+
+                parent.Macros.Add(new Macro((string)yamlKey, (string)yamlMacros[yamlKey]));
+            }
+            
+            return 0;
+        }
+
+        int processConventions(IList conventions, bool impliedPass) {
+            foreach (var convention in conventions) {
+                if (convention is IDictionary yamlConvention) {
+                    if (lastSequences.Count == 0) {
+                        FromYamlObject(yamlConvention, parent, impliedPass);    
+                    }
+
+                    foreach (var sequence in lastSequences) {
+                        FromYamlObject(yamlConvention, parent.GetConvention(sequence, true) ?? parent, impliedPass);    
+                    }
+                }
+            }
+            
+            return 0;
+        }
+
+        int processConventionSingle(string biddingSequence, IDictionary yamlValue) {
+            lastSequences = biddingSequence
+                .Split(',')
+                .Select(
+                    seq => seq
+                        .Replace("/", "-P-")
+                        .Replace(" ", "")
+                        .Split('-').ToList()
+                ).ToList();
+
+            if (impliedPass) {
+                lastSequences.ForEach(s => s.Insert(0, "P"));
+            }
+
+            foreach (var sequence in lastSequences) {
+                var child = parent.GetConvention(sequence, true);
+                if (child == null) {
+                    continue;
+                }
+
+                child.Priority = yamlConventionCount++;
+
+                if (yamlValue.Contains("description")) {
+                    child.Description = yamlValue["description"] as string;
+                }
+            }
+
+            return 0;
+        }
+    }
+}

@@ -58,23 +58,32 @@
 }
 
 tr > td:first-child > .alert {
-    padding-left: 0.5em;
-    padding-right: 0.5em;
     background-color: #f007;
+
+    display: inline-block;
+    width: -moz-available; /* WebKit-based browsers will ignore this. */
+    width: -webkit-fill-available; /* Mozilla-based browsers will ignore this. */
+    width: fill-available;
 }
 
 tr > td:first-child > .announce {
-    padding-left: 0.5em;
-    padding-right: 0.5em;
     background-color: #00f7;
     color: black;
+    
+    display: inline-block;
+    width: -moz-available; /* WebKit-based browsers will ignore this. */
+    width: -webkit-fill-available; /* Mozilla-based browsers will ignore this. */
+    width: fill-available;
 }
 
 tr > td:first-child > .relay {
-    padding-left: 0.5em;
-    padding-right: 0.5em;
     background-color: #0707;
     color: black;
+    
+    display: inline-block;
+    width: -moz-available; /* WebKit-based browsers will ignore this. */
+    width: -webkit-fill-available; /* Mozilla-based browsers will ignore this. */
+    width: fill-available;
 }
 
 .club-suit,
@@ -111,6 +120,19 @@ td {
     padding-bottom: 0px;
 }
 
+td p:first-child {
+    margin: 0px;
+}
+
+td p:last-child {
+    margin: 0px;
+}
+
+td p {
+    margin-top: 0.25em;
+    margin-bottom: 0.25em;
+}
+
 tr {
     border-top: 1px solid black;
     border-bottom: 1px solid black;
@@ -130,7 +152,8 @@ tr {
 td:first-child {
     border-left: none;
     font-weight: bold;
-    min-width: 24px;
+    min-width: 30px;
+    text-align: center;
 }
 
 td:last-child {

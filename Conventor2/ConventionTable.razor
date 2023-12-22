@@ -20,7 +20,7 @@
                 @if (childConvention.Children.Count > 0) {
                     <details open="@(Depth <= 3)">
                         <summary>Expand</summary>
-                        <ConventionTable StartingSequence="@childConvention.BiddingSequence" />
+                        <ConventionTable SectionName=@SectionName StartingSequence=@childConvention.BiddingSequence />
                     </details>
                 }
 			</td>
@@ -33,13 +33,12 @@
     [Parameter]
     public String StartingSequence { get; set; } = "";
 
+    [Parameter]
+    public String SectionName { get; set; } = "";
+
     public Convention? Convention {
         get {
-            if (StartingSequence == null) {
-                return ConventionExpander.RootConvention;
-            }
-
-            return ConventionExpander.GetConvention(StartingSequence);
+            return ConventorConfig.GetConvention(SectionName, StartingSequence);
         }
     }
 

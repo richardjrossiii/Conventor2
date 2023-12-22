@@ -13,7 +13,7 @@ services.AddLogging();
 IServiceProvider serviceProvider = services.BuildServiceProvider();
 ILoggerFactory loggerFactory = serviceProvider.GetRequiredService<ILoggerFactory>();
 
-ConventionExpander.ParseConventions("example.yaml");
+ConventionParser.ParseSections("sections.yaml");
 
 
 await using var htmlRenderer = new HtmlRenderer(serviceProvider, loggerFactory);

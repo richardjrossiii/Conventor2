@@ -5,7 +5,15 @@
         <link rel="stylesheet" href="style.css" />
     </head>
     <body>
-        <ConventionTable StartingSequence="" />
+        @foreach (var s in ConventorConfig.AllSections) {
+            <h1>@s.Name</h1>
+
+            <p>
+                @s.Description
+            </p>
+
+            <ConventionTable SectionName=@s.Name StartingSequence="" />
+        }
     </body>
 </html>
 

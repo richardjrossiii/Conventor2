@@ -27,8 +27,8 @@ public record struct Bid(int Level = 0, ContractStrain Strain = ContractStrain.N
     }
 
     public bool IsPass => Level == 0 && Strain == ContractStrain.None;
-    public bool IsDouble => Level == 1 && Strain == ContractStrain.None;
-    public bool IsRedouble => Level == 2 && Strain == ContractStrain.None;
+    public bool IsDouble => Level == -1 && Strain == ContractStrain.None;
+    public bool IsRedouble => Level == -2 && Strain == ContractStrain.None;
 
     public Bid NextStep() {
         return this with
@@ -121,7 +121,55 @@ public static class BiddingExtensions
         };
     }
 
-    public static bool IsLegalBiddingSequence(Auction bids) {
+    public static bool IsLegalBiddingSequence(this Auction bids) {
+        Bid highestBid = Bid.Pass;
+        Bid lastNonPass = Bid.Pass;
+        int passes = 0;
+
+        foreach (var nextBid in bids) {
+            if (nextBid.IsPass) {
+                // Pass is always legal unless it would end the auction
+                if (passes == 3) {
+                    return false;
+                }
+
+                passes++;
+                continue;
+            }
+
+            if (nextBid.IsDouble) {
+                if (passes == 1 || passes == 3) {
+                    // you cannot double your partner
+                    return false;
+                }
+
+                if (lastNonPass.IsDouble) {
+                    // Cannot double an already doubled contract
+                    return false;
+                }
+            } else if (nextBid.IsRedouble) {
+                if (passes == 1 || passes == 3) {
+                    // you cannot redouble your partner
+                    return false;
+                }
+
+                if (lastNonPass.IsRedouble) {
+                    // Cannot double an already redoubled contract
+                    return false;
+                }
+            } else {
+                // New suit builds are always legal as long as they're ascending in value
+                if (nextBid <= highestBid) {
+                    return false;
+                }
+
+                highestBid = nextBid;
+            }
+
+            passes = 0;
+            lastNonPass = nextBid;
+        }
+
         return true;
     }
 

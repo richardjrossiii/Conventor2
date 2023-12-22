@@ -7,9 +7,9 @@ using System.Threading.Tasks;
 namespace Conventor2;
 
 internal class ConventorConfig {
-    public static ConventorConfig GlobalConfig { get; set; } = default!;
+    public static List<Section> AllSections { get; set; } = [];
 
-    public List<ConventionExpander> HTMLMacros { get; set; } = [];
-
-    public Dictionary<string, string> Conventions { get; set; } = []; 
+    public static Convention? GetConvention(string section, string biddingSequence) {
+        return AllSections.Where(s => s.Name == section).FirstOrDefault()?.RootConvention?.GetConvention(biddingSequence.Split('-'));
+    }
 }

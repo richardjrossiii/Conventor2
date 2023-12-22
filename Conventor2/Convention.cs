@@ -1,7 +1,9 @@
-﻿using Microsoft.AspNetCore.Html;
+﻿using HeyRed.MarkdownSharp;
+using Microsoft.AspNetCore.Html;
 using System;
 using System.Collections;
 using System.Collections.Generic;
+using System.Collections.Immutable;
 using System.Diagnostics;
 using System.Linq;
 using System.Text;
@@ -11,85 +13,16 @@ using System.Threading.Tasks;
 namespace Conventor2;
 
 public class Convention {
-    private static bool IsExpandedBid(string rawBid) {
-        if (rawBid.Contains("|") || rawBid.Contains("?")) {
-            return false;
-        }
-
-        if (majorRegex.IsMatch(rawBid) || minorRegex.IsMatch(rawBid)) {
-            return false;
-        }
-
-        return true;
-    }
-
-    private static string ParseBid(string rawBid, out string alertTag, out string bidSuit, out int bidLevel, out bool isAlertable, out bool isAnnouncable) {
-        if (!IsExpandedBid(rawBid)) {
-            alertTag = string.Empty;
-            bidSuit = string.Empty;
-            bidLevel = -1;
-            isAlertable = false;
-            isAnnouncable = false;
-
-            return rawBid;
-        }
-
-        if (rawBid.Contains("!!")) {
-            isAnnouncable = true;
-            isAlertable = false;
-        } else if (rawBid.Contains('!')) {
-            isAnnouncable = false;
-            isAlertable = true;
-        } else {
-            isAnnouncable = false;
-            isAlertable = false;
-        }
-        
-        var tagIndex = rawBid.IndexOf('[');
-        if (tagIndex == -1) {
-            alertTag = "";
-        } else {
-            alertTag = rawBid.Substring(tagIndex + 1, rawBid.Length - tagIndex - 2);
-        }
-
-        bidSuit = rawBid switch {
-            _ when rawBid.Contains('C') => "C",
-            _ when rawBid.Contains('D') => "D",
-            _ when rawBid.Contains('H') => "H",
-            _ when rawBid.Contains('S') => "S",
-            _ when rawBid.Contains("NT") => "NT",
-            _ when rawBid.Contains('P') => "P",
-            _ when rawBid.Contains("XX") => "XX",
-            _ when rawBid.Contains('X') => "X",
-            _ => "",
-        };
-
-        if (int.TryParse(new string(rawBid.TakeWhile(char.IsNumber).ToArray()), out bidLevel)) {
-            var bid = $"{bidLevel}{bidSuit}";
-            if (!string.IsNullOrEmpty(alertTag)) {
-                bid += $"[{alertTag}]";
-            }
-
-            return bid;
-        }
-        
-        return rawBid;
-    }
-
-    private static string ParseBid(string rawBid) {
-        return ParseBid(rawBid, out _, out _, out _, out _, out _);
-    }
-
     public Convention? Parent { get; set; }
 
     public string BiddingSequence {
         get {
             var parentSequence = Parent?.BiddingSequence;
             if (string.IsNullOrEmpty(parentSequence)) {
-                return Bid;
+                return BidString;
             }
 
-            return $"{parentSequence}-{Bid}";
+            return $"{parentSequence}-{BidString}";
         }
     }
 
@@ -97,7 +30,7 @@ public class Convention {
         Parent = parent;
         RawBid = bid;
 
-        Bid = ParseBid(bid, out var alertTag, out var bidSuit, out var bidLevel, out var isAlertable, out var isAnnouncable);
+        BidString = BidParser.ParseBid(bid, out var alertTag, out var bidSuit, out var bidLevel, out var isAlertable, out var isAnnouncable);
 
         AlertTag = alertTag;
         BidSuit = bidSuit;
@@ -106,7 +39,7 @@ public class Convention {
         IsAnnouncable = isAnnouncable;
     }
 
-    public string Bid { get; private init; }
+    public string BidString { get; private init; }
 
     public string BidSuit { get; private init; }
 
@@ -115,6 +48,22 @@ public class Convention {
     public string AlertTag { get; private init; }
 
     public int BidLevel { get; private init; }
+
+    public Bid Bid {
+        get {
+            return (BidLevel, BidSuit) switch {
+                (_, "P") => Bid.Pass,
+                (_, "X") => Bid.Double,
+                (_, "XX") => Bid.Redouble,
+                (var level, "C") => new Bid(level, ContractStrain.Clubs),
+                (var level, "D") => new Bid(level, ContractStrain.Diamonds),
+                (var level, "H") => new Bid(level, ContractStrain.Hearts),
+                (var level, "S") => new Bid(level, ContractStrain.Spades),
+                (var level, "NT") => new Bid(level, ContractStrain.NoTrump),
+                _ => Bid.Pass,
+            };
+        }
+    }
 
     public HtmlString HumanReadableBid { 
         get {
@@ -127,8 +76,8 @@ public class Convention {
                 "D" => $"{BidLevel}<span class=\"diamond-suit\">D</span>{alertSuffix}",
                 "H" => $"{BidLevel}<span class=\"heart-suit\">H</span>{alertSuffix}",
                 "S" => $"{BidLevel}<span class=\"spade-suit\">S</span>{alertSuffix}",
-                "NT" => $"NT{alertSuffix}",
-                _ => Bid,
+                "NT" => $"{BidLevel}NT{alertSuffix}",
+                _ => BidString,
             };
 
             if (IsAlertable) {
@@ -142,8 +91,8 @@ public class Convention {
         } 
     }
 
-    public bool IsAlertable { get; private init; }   
-    public bool IsAnnouncable { get; private init; }   
+    public bool IsAlertable { get; private set; }   
+    public bool IsAnnouncable { get; private set; }   
 
     public int Priority { get; set; } = 0;
     
@@ -190,6 +139,9 @@ public class Convention {
                 depth++;
             }
 
+            var m = new Markdown(new MarkdownOptions { AutoNewLines = true, });
+            tempDescription = m.Transform(tempDescription.Trim());
+
             humanReadableDescription_ = new HtmlString(tempDescription);
             return humanReadableDescription_;
         }
@@ -205,6 +157,8 @@ public class Convention {
             if (this.Priority > other.Priority || string.IsNullOrEmpty(other.Description)) {
                 other.Description = Description;
                 other.Priority = Priority;
+                other.IsAlertable = IsAlertable;
+                other.IsAnnouncable = IsAnnouncable;
             } else {
                 // debug
                 Debug.Print("test");
@@ -228,7 +182,7 @@ public class Convention {
 
     public Convention? GetConvention(IEnumerable<string> biddingSequence, bool create = false) {
         var rawBid = biddingSequence.FirstOrDefault();
-        var parsedBid = ParseBid(rawBid ?? "");
+        var parsedBid = BidParser.ParseBid(rawBid ?? "");
         if (string.IsNullOrEmpty(rawBid)) {
             return this;
         }
@@ -244,236 +198,75 @@ public class Convention {
         return Children[parsedBid].GetConvention(biddingSequence.Skip(1), create);
     }
 
-
-    private static Regex majorRegex = new Regex("([1234567])M"); 
-    private static Regex minorRegex = new Regex("([1234567])m");
-
-    private struct ExpansionState {
-        public string ExpandedBid { get; set; }
-
-        public List<Macro> DefinedMacros { get; set; }
-        public int MajorState { get; set; }
-        public int MinorState {  get; set; }
-
-        public bool ParentLevel { get; set; }
-        
-        public static List<Macro> heartsMacros = [ new Macro("\\$M", "H"), new Macro("\\$OM", "S") ];
-        public static List<Macro> spadesMacros = [ new Macro("\\$M", "S"), new Macro("\\$OM", "H") ];
-        public static List<Macro> clubsMacros = [ new Macro("\\$m", "C"), new Macro("\\$Om", "D") ];
-        public static List<Macro> diamondsMacros = [ new Macro("\\$m", "D"), new Macro("\\$Om", "C") ];
-    }
-
     public void FullyExpandChildren() {
-        ExpandChildren_(new ExpansionState { MajorState = 0, MinorState = 0 });
+        ExpandStateless_();
+
+        List<Convention> statefulExpansions = Expander.AllExpanders.Select(expanders => Expanded(expanders)).Where(c => c != null).ToList();
+
+        Children.Clear();
+
+        foreach (var expansion in statefulExpansions) {
+            expansion.MergeTo(this);
+        }
     }
 
-    private void ExpandChildren_(ExpansionState expansionState) {
-        // At this point, we need to to handle 'or' bids, as well as Major/Minor expansions.
-        // The root object (i.e. this) never needs to do any expanding work - so we can do this by
+    private Convention Expanded(Expander[] expanders) {
+        var newBid = RawBid;
+        var addedMacros = new List<Macro>();
+        foreach (var expander in expanders) {
+            newBid = expander.Expand(newBid, ref addedMacros);
+        }
+
+        Convention copy = new Convention(null, newBid);
+        copy.Description = Description;
+        copy.Priority = Priority;
+        copy.Macros.AddRange(Macros);
+        copy.Macros.AddRange(addedMacros);
+
+        foreach (var (key, child) in Children) {
+            var expandedChild = child.Expanded(expanders);
+
+            expandedChild.MergeTo(copy.GetConvention([expandedChild.BidString], true)!);
+        }
+
+        return copy;
+    }
+
+    private void ExpandStateless_() {
         foreach (var (key, oldChild) in Children.ToList()) {
-            List<ExpansionState> expansions = oldChild.RawBid.Split("|").SelectMany<string, ExpansionState>(b => {
-                if (majorRegex.IsMatch(b)) {
-                    return expansionState.MajorState switch {
-                        0 => [
-                            new ExpansionState { 
-                                ExpandedBid=majorRegex.Replace(b, "$1H"), 
-                                DefinedMacros = [ ..ExpansionState.heartsMacros ],
-                                MajorState=1,
-                                MinorState=expansionState.MinorState,
-                            },
-                            new ExpansionState {
-                                ExpandedBid=majorRegex.Replace(b, "$1S"), 
-                                DefinedMacros = [ ..ExpansionState.spadesMacros ],
-                                MajorState=2,
-                                MinorState=expansionState.MinorState,
-                            },
-                        ],
-                        1 => [
-                            new ExpansionState { 
-                                ExpandedBid=majorRegex.Replace(b, "$1H"), 
-                                DefinedMacros = [ ..ExpansionState.heartsMacros ],
-                                MajorState=1,
-                                MinorState=expansionState.MinorState,
-                            },
-                        ],
-                        2 => [
-                            new ExpansionState {
-                                ExpandedBid=majorRegex.Replace(b, "$1S"), 
-                                DefinedMacros = [ ..ExpansionState.spadesMacros ],
-                                MajorState=2,
-                                MinorState=expansionState.MinorState,
-                            },
-                        ],
-                        _ => [],
-                    };
-                }
-
-                return [new ExpansionState {
-                    ExpandedBid=b, 
-                    MajorState=expansionState.MajorState, 
-                    MinorState=expansionState.MinorState, 
-                }];
-            }).SelectMany<ExpansionState, ExpansionState>(e => {
-                if (minorRegex.IsMatch(e.ExpandedBid)) {
-                    return expansionState.MinorState switch {
-                        0 => [
-                            new ExpansionState {
-                                ExpandedBid = minorRegex.Replace(e.ExpandedBid, "$1C"),
-                                DefinedMacros = [ ..e.DefinedMacros ?? [], .. ExpansionState.clubsMacros],
-                                MajorState=e.MajorState,
-                                MinorState=1,
-                            },
-                            new ExpansionState {
-                                ExpandedBid = minorRegex.Replace(e.ExpandedBid, "$1D"),
-                                DefinedMacros = [ .. e.DefinedMacros ?? [], .. ExpansionState.diamondsMacros ],
-                                MajorState=e.MajorState,
-                                MinorState=2,
-                            },
-                        ],
-                        1 => [
-                            new ExpansionState {
-                                ExpandedBid = minorRegex.Replace(e.ExpandedBid, "$1C"),
-                                DefinedMacros = [ .. e.DefinedMacros ?? [], .. ExpansionState.clubsMacros ],
-                                MajorState=e.MajorState,
-                                MinorState=1,
-                            },
-                        ],
-                        2 => [
-                            new ExpansionState {
-                                ExpandedBid = minorRegex.Replace(e.ExpandedBid, "$1D"),
-                                DefinedMacros = [ .. e.DefinedMacros ?? [], .. ExpansionState.diamondsMacros ],
-                                MajorState=e.MajorState,
-                                MinorState=2,
-                            },
-                        ],
-                        _ => [],
-                    }; ;
-                }
-
-                return [e];
-            }).ToList();
+            List<string> expansions = oldChild.RawBid.Split("|").ToList();
             
             Children.Remove(key);
 
             foreach (var expansion in expansions) {
-                var newChild = GetConvention([expansion.ExpandedBid], true);
+                var newChild = GetConvention([expansion], true);
                 if (newChild == null) {
                     continue;
                 }
 
                 oldChild.MergeTo(newChild);
-
-                if (expansion.DefinedMacros != null) {
-                    foreach (var macro in expansion.DefinedMacros) {
-                        var parent = newChild;
-                        var shouldAdd = true;
-                        while (parent != null) {
-                            if (parent.Macros.Contains(macro)) {
-                                shouldAdd = false;
-                                break;
-                            }
-
-                            parent = parent.Parent;
-                        }
-
-                        if (shouldAdd) {
-                            newChild.Macros.Insert(0, macro);
-                        }
-                    }
-                }
-
-                newChild.ExpandChildren_(expansion);
+                newChild.ExpandStateless_();
             }
         }
     }
 
     public void TrimIllegalSequences() {
-        // TODO
-    }
+        foreach (var childKey in Children.Keys.ToList()) {
+            var child = Children[childKey];
+            child.TrimIllegalSequences();
 
-    private static int yamlConventionCount = 0;
-
-    public static Convention FromYamlObject(IDictionary yamlObject, Convention? parent = null, bool impliedPass = false) {
-        if (parent == null) {
-            parent = new Convention(null, "");
-        }
-
-        List<List<string>> lastSequences = [];
-        foreach (var yamlPair in yamlObject) {
-            if (yamlPair is not DictionaryEntry) {
-                continue;
+            var temp = child;
+            var biddingSequence = new List<Bid>();
+            while (temp.Parent != null) {
+                biddingSequence.Insert(0, temp.Bid);
+                temp = temp.Parent;
             }
 
-            var yamlEntry = (DictionaryEntry)yamlPair;
-            _ = yamlEntry switch {
-                { Key: "define", Value: IDictionary yamlValue } => processMacros(yamlValue),
-                { Key: "conventions" or ".", Value: IList yamlConventions } => processConventions(yamlConventions, false),
-                { Key: "/", Value: IList yamlConventions } => processConventions(yamlConventions, true),
-                { Key: string biddingSequence, Value: string yamlDescription } => processConventionSingle(biddingSequence, new Dictionary<string, object> {
-                    ["description"] = yamlDescription, 
-                }),
-                { Key: string biddingSequence, Value: IDictionary yamlDict } => processConventionSingle(biddingSequence, yamlDict),
-                _ => 0,
-            };
-        }
-        return parent;
-
-        int processMacros(IDictionary yamlMacros) {
-            foreach (var yamlKey in yamlMacros.Keys) {
-                if (yamlKey == null) {
-                    continue;
-                }
-
-                parent.Macros.Add(new Macro((string)yamlKey, (string)yamlMacros[yamlKey]));
+            if (!biddingSequence.IsLegalBiddingSequence()) {
+                Children.Remove(childKey);        
+            } else if (string.IsNullOrEmpty(child.Description) && child.Children.Count == 0) {
+                Children.Remove(childKey);
             }
-            
-            return 0;
-        }
-
-        int processConventions(IList conventions, bool impliedPass) {
-            foreach (var convention in conventions) {
-                if (convention is IDictionary yamlConvention) {
-                    if (lastSequences.Count == 0) {
-                        FromYamlObject(yamlConvention, parent, impliedPass);    
-                    }
-
-                    foreach (var sequence in lastSequences) {
-                        FromYamlObject(yamlConvention, parent.GetConvention(sequence, true) ?? parent, impliedPass);    
-                    }
-                }
-            }
-            
-            return 0;
-        }
-
-        int processConventionSingle(string biddingSequence, IDictionary yamlValue) {
-            lastSequences = biddingSequence
-                .Split(',')
-                .Select(
-                    seq => seq
-                        .Replace("/", "-P-")
-                        .Replace(" ", "")
-                        .Split('-').ToList()
-                ).ToList();
-
-            if (impliedPass) {
-                lastSequences.ForEach(s => s.Insert(0, "P"));
-            }
-
-            foreach (var sequence in lastSequences) {
-                var child = parent.GetConvention(sequence, true);
-                if (child == null) {
-                    continue;
-                }
-
-                child.Priority = yamlConventionCount++;
-
-                if (yamlValue.Contains("description")) {
-                    child.Description = yamlValue["description"] as string;
-                }
-            }
-
-            return 0;
         }
     }
 }
