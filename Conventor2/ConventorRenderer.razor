@@ -2,7 +2,7 @@
 
 <html>
     <head>
-        <link rel="stylesheet" href="style.css" />
+        <link rel="stylesheet" href="resources/style.css" />
     </head>
     <body>
         @foreach (var s in ConventorConfig.AllSections) {
@@ -16,7 +16,3 @@
         }
     </body>
 </html>
-
-@code {
-    public String StaticResourcesPath { get; set; } = "resources";
-}
