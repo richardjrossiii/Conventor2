@@ -87,10 +87,17 @@ public class ConventionParser {
         if (yamlRoot.TryGetChild<YamlSequenceNode>("sections") is { } yamlSections)
             foreach (var yamlSection in yamlSections) {
                 if (yamlSection is YamlMappingNode yamlDict) {
+                    Convention? rootConvention = null;
+
+                    var yamlPath = yamlDict.TryGetChild<YamlScalarNode>("path")?.Value;
+                    if (!string.IsNullOrEmpty(yamlPath)) {
+                        rootConvention = ParseConventionsAt(Path.Join(Path.GetDirectoryName(path), yamlPath), globalMacros);
+                    }
+
                     ConventorConfig.AllSections.Add(new Section {
                         Name = yamlDict.TryGetChild<YamlScalarNode>("name")?.Value ?? "",
                         Description = yamlDict.TryGetChild<YamlScalarNode>("description")?.Value ?? "",
-                        RootConvention = ParseConventionsAt(yamlDict.TryGetChild<YamlScalarNode>("path")?.Value ?? "", globalMacros),
+                        RootConvention = rootConvention,
                     });
                 }
             }
