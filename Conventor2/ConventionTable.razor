@@ -18,9 +18,9 @@
                 </div>
                 
                 @if (childConvention.Children.Count > 0) {
-                    <details open="@(Depth <= 3)">
+                    <details open="@((BiddingSequence.Count + 1) % 3 != 0)">
                         <summary>Expand</summary>
-                        <ConventionTable SectionName=@SectionName StartingSequence=@childConvention.BiddingSequence />
+                        <ConventionTable SectionName=@SectionName BiddingSequence=@childConvention.BiddingSequence />
                     </details>
                 }
 			</td>
@@ -31,14 +31,14 @@
 @code {
 
     [Parameter]
-    public String StartingSequence { get; set; } = "";
+    public List<BidType> BiddingSequence { get; set; } = [];
 
     [Parameter]
     public String SectionName { get; set; } = "";
 
     public Convention? Convention {
         get {
-            return ConventorConfig.GetConvention(SectionName, StartingSequence);
+            return ConventorConfig.GetConvention(SectionName, BiddingSequence);
         }
     }
 
@@ -48,13 +48,7 @@
         };
     }
 
-    public int Depth {
-        get {
-            return StartingSequence.Count(c => c == '-');
-        }
-    }
-
     public IEnumerable<Convention> ChildConventions() {
-        return (Convention?.Children.Values ?? Enumerable.Empty<Convention>()).OrderBy(c => c.SortOrder);
+        return (Convention?.Children.Values ?? Enumerable.Empty<Convention>()).OrderBy(c => c.Bid);
     }
 }

@@ -7,15 +7,21 @@ using System.Threading.Tasks;
 namespace Conventor2; 
 
 public class BidParser {
-    public static string ParseBid(string rawBid, out string alertTag, out string bidSuit, out int bidLevel, out bool isAlertable, out bool isAnnouncable) {
+    public static BidType? ParseBid(string rawBid, out string? alertTag, out bool isAlertable, out bool isAnnouncable) {
         if (!Expander.IsExpandedBid(rawBid)) {
-            alertTag = string.Empty;
-            bidSuit = string.Empty;
-            bidLevel = -1;
+            alertTag = null;
             isAlertable = false;
             isAnnouncable = false;
 
-            return rawBid;
+            return BidType.Unexpanded(rawBid);
+        }
+
+        if (string.IsNullOrEmpty(rawBid)) {
+            alertTag = null;
+            isAlertable = false;
+            isAnnouncable = false;
+
+            return null;
         }
 
         if (rawBid.Contains("!!")) {
@@ -31,40 +37,41 @@ public class BidParser {
         
         var tagIndex = rawBid.IndexOf('[');
         if (tagIndex == -1) {
-            alertTag = "";
+            alertTag = null;
         } else {
             alertTag = rawBid.Substring(tagIndex + 1, rawBid.Length - tagIndex - 2);
         }
 
-        bidSuit = rawBid switch {
-            _ when rawBid.Contains('C') => "C",
-            _ when rawBid.Contains('D') => "D",
-            _ when rawBid.Contains('H') => "H",
-            _ when rawBid.Contains('S') => "S",
-            _ when rawBid.Contains("NT") => "NT",
-            _ when rawBid.Contains('P') => "P",
-            _ when rawBid.Contains("XX") => "XX",
-            _ when rawBid.Contains('X') => "X",
-            _ => "",
+        var bidStrain = rawBid switch {
+            _ when rawBid.Contains('C') => ContractStrain.Clubs,
+            _ when rawBid.Contains('D') => ContractStrain.Diamonds,
+            _ when rawBid.Contains('H') => ContractStrain.Hearts,
+            _ when rawBid.Contains('S') => ContractStrain.Spades,
+            _ when rawBid.Contains("NT") => ContractStrain.NoTrump,
+            _ => ContractStrain.None,
         };
 
         var alertSuffix = string.IsNullOrEmpty(alertTag) ? "" : $"[{alertTag}]";
-        if (int.TryParse(new string(rawBid.TakeWhile(char.IsNumber).ToArray()), out bidLevel)) {
-            return $"{bidLevel}{bidSuit}{alertSuffix}";
+        if (int.TryParse(new string(rawBid.TakeWhile(char.IsNumber).ToArray()), out var bidLevel)) {
+            return new BidType(bidLevel, bidStrain) { AlertTag = alertTag };
         }
 
-        if (bidSuit == "X") {
-            return $"X{alertTag}";
+        if (rawBid.StartsWith("XX")) {
+            return BidType.Redouble with { AlertTag = alertTag };
         }
 
-        if (bidSuit == "XX") {
-            return $"XX{alertTag}";
+        if (rawBid.StartsWith("X")) {
+            return BidType.Double with { AlertTag = alertTag };
+        }
+
+        if (rawBid.StartsWith("P")) {
+            return BidType.Pass with { AlertTag = alertTag };
         }
         
-        return rawBid;
+        return BidType.Pass;
     }
 
-    public static string ParseBid(string rawBid) {
-        return ParseBid(rawBid, out _, out _, out _, out _, out _);
+    public static BidType? ParseBid(string rawBid) {
+        return ParseBid(rawBid, out _, out _, out _);
     }
 }

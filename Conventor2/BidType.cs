@@ -1,27 +1,36 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
 
 namespace Conventor2;
 
-using Auction = IReadOnlyList<Bid>;
-public record struct Bid(int Level = 0, ContractStrain Strain = ContractStrain.None) : IComparable<Bid>, IEquatable<Bid> {
-    public static readonly Bid Pass = new(0, ContractStrain.None);
-    public static readonly Bid Double = new(-1, ContractStrain.None);
-    public static readonly Bid Redouble = new(-2, ContractStrain.None);
+using Auction = IReadOnlyList<BidType>;
+public record struct BidType(int Level = 0, ContractStrain Strain = ContractStrain.None, string? AlertTag = null) : IComparable<BidType>, IEquatable<BidType> {
+    public static readonly BidType Pass = new(0, ContractStrain.None);
+    public static readonly BidType Double = new(-1, ContractStrain.None);
+    public static readonly BidType Redouble = new(-2, ContractStrain.None);
 
-    public static List<Bid> AllBids { get; } = _GenerateAllBids().ToList();
+    public static BidType Unexpanded(string bidToExpand) {
+        return new BidType(-3, ContractStrain.None) {
+            UnexpandedBid = bidToExpand,
+        };
+    }
 
-    private static IEnumerable<Bid> _GenerateAllBids() {
+    public string? UnexpandedBid { get; set; }
+
+    public static List<BidType> AllBids { get; } = _GenerateAllBids().ToList();
+
+    private static IEnumerable<BidType> _GenerateAllBids() {
         yield return Pass;
         yield return Double;
         yield return Redouble;
         
         for (var level = 1; level <= 7; level++) {
             for (var contractStrain = (int)ContractStrain.Clubs; contractStrain <= (int)ContractStrain.NoTrump; contractStrain++) {
-                yield return new Bid { Level = level, Strain = (ContractStrain)contractStrain };
+                yield return new BidType { Level = level, Strain = (ContractStrain)contractStrain };
             }
         }
     }
@@ -30,7 +39,7 @@ public record struct Bid(int Level = 0, ContractStrain Strain = ContractStrain.N
     public bool IsDouble => Level == -1 && Strain == ContractStrain.None;
     public bool IsRedouble => Level == -2 && Strain == ContractStrain.None;
 
-    public Bid NextStep() {
+    public BidType NextStep() {
         return this with
         {
             Level = Strain == ContractStrain.NoTrump ? Level + 1 : Level,
@@ -38,8 +47,16 @@ public record struct Bid(int Level = 0, ContractStrain Strain = ContractStrain.N
         };
     }
 
-    public int CompareTo(Bid other) {
-        var comparisonResult = this.Level.CompareTo(other.Level);
+    public int CompareTo(BidType other) {
+        if (Strain == ContractStrain.None) {
+            if (other.Strain == ContractStrain.None) {
+                return -(Level.CompareTo(other.Level));
+            } else {
+                return -1;
+            }
+        }
+
+        var comparisonResult = Level.CompareTo(other.Level);
         if (comparisonResult != 0) {
             return comparisonResult;
         }
@@ -52,19 +69,19 @@ public record struct Bid(int Level = 0, ContractStrain Strain = ContractStrain.N
         return 0;
     }
 
-    public static bool operator <(Bid left, Bid right) {
+    public static bool operator <(BidType left, BidType right) {
         return left.CompareTo(right) < 0;
     }
 
-    public static bool operator <=(Bid left, Bid right) {
+    public static bool operator <=(BidType left, BidType right) {
         return left.CompareTo(right) <= 0;
     }
 
-    public static bool operator >(Bid left, Bid right) {
+    public static bool operator >(BidType left, BidType right) {
         return left.CompareTo(right) > 0;
     }
 
-    public static bool operator >=(Bid left, Bid right) {
+    public static bool operator >=(BidType left, BidType right) {
         return left.CompareTo(right) >= 0;
     }
 
@@ -83,6 +100,10 @@ public record struct Bid(int Level = 0, ContractStrain Strain = ContractStrain.N
     }
 
     public override string ToString() {
+        if (UnexpandedBid != null) {
+            return UnexpandedBid;
+        }
+
         return (Level, Strain) switch {
             (-1, _) => "X",
             (-2, _) => "XX",
@@ -108,6 +129,17 @@ public enum ContractStrain : int
 
 public static class BiddingExtensions
 {
+    public static string ToShortString(this ContractStrain strain) {
+        return strain switch {
+            ContractStrain.Clubs => "C",
+            ContractStrain.Diamonds => "D",
+            ContractStrain.Hearts => "H",
+            ContractStrain.Spades => "S",
+            ContractStrain.NoTrump => "NT",
+            _ => "",
+        };
+    }
+
     public static ContractStrain Next(this ContractStrain suit)
     {
         return suit switch
@@ -122,8 +154,8 @@ public static class BiddingExtensions
     }
 
     public static bool IsLegalBiddingSequence(this Auction bids) {
-        Bid highestBid = Bid.Pass;
-        Bid lastNonPass = Bid.Pass;
+        BidType highestBid = BidType.Pass;
+        BidType lastNonPass = BidType.Pass;
         int passes = 0;
 
         foreach (var nextBid in bids) {
@@ -159,8 +191,12 @@ public static class BiddingExtensions
                 }
             } else {
                 // New suit builds are always legal as long as they're ascending in value
-                if (nextBid <= highestBid) {
+                if (highestBid >= nextBid) {
                     return false;
+                }
+
+                if (nextBid.Level == 2 && nextBid.Strain == ContractStrain.Spades) {
+                    Debug.Print("test");
                 }
 
                 highestBid = nextBid;
@@ -173,7 +209,7 @@ public static class BiddingExtensions
         return true;
     }
 
-    public static bool IsNextBidLegal(this Auction bids, Bid nextBid) {
+    public static bool IsNextBidLegal(this Auction bids, BidType nextBid) {
         if (nextBid.Level > 7 || nextBid.Level < 0) {
             return false;
         }
@@ -237,10 +273,10 @@ public static class BiddingExtensions
         return nextBid > lastContractBid;
     }
 
-    public static IEnumerable<Bid> AllChildBids(this Auction auction) {
+    public static IEnumerable<BidType> AllChildBids(this Auction auction) {
         var lastBid = auction.LastOrDefault(b => !b.IsPass);
         if (lastBid.IsPass) {
-            foreach (var openingBid in Bid.AllBids) {
+            foreach (var openingBid in BidType.AllBids) {
                 if (auction.Count == 3 && openingBid.IsPass) {
                     continue;
                 }
@@ -256,30 +292,30 @@ public static class BiddingExtensions
         }
 
         if (auction.Count < 3) {
-            yield return Bid.Pass;
+            yield return BidType.Pass;
         } else {
             if (auction[auction.Count - 1].IsPass && auction[auction.Count - 2].IsPass && auction[auction.Count - 3].IsPass) {
                 // Do nothing
-            } else { yield return Bid.Pass; }
+            } else { yield return BidType.Pass; }
         }
 
         if (auction.Count > 0) {
-            if (auction[auction.Count - 1] != Bid.Pass) { 
-                yield return Bid.Double;
+            if (auction[auction.Count - 1] != BidType.Pass) { 
+                yield return BidType.Double;
             }
 
-            if (auction[auction.Count - 1] == Bid.Double) {
-                yield return Bid.Redouble;
+            if (auction[auction.Count - 1] == BidType.Double) {
+                yield return BidType.Redouble;
             }
         }
         if (auction.Count > 1) {
-            if (auction[auction.Count - 2] == Bid.Pass) {
-                yield return Bid.Double;
+            if (auction[auction.Count - 2] == BidType.Pass) {
+                yield return BidType.Double;
             }
         }
         if (auction.Count > 2) {
-            if (auction[auction.Count - 2] == Bid.Pass && auction[auction.Count - 3] == Bid.Double) {
-                yield return Bid.Redouble;
+            if (auction[auction.Count - 2] == BidType.Pass && auction[auction.Count - 3] == BidType.Double) {
+                yield return BidType.Redouble;
             }
         }
 
@@ -291,6 +327,14 @@ public static class BiddingExtensions
     }
 
     public static string ToSequenceString(this Auction bids) {
-        return "";
+        return string.Join("-", bids.Select(b => b.ToString()));
+    }
+
+    public static List<BidType> ToBiddingSequence(this BidType? bid) {
+        if (bid == null) {
+            return [];
+        }
+
+        return [bid ?? BidType.Pass];
     }
 }

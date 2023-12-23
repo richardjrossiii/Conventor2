@@ -17,11 +17,13 @@ public static class YamlExtensions {
 
         return childNode as T;
     }
+
+    public static YamlMappingNode CreateDescriptionMapping(this YamlScalarNode scalarNode) {
+        return new YamlMappingNode(new KeyValuePair<YamlNode, YamlNode>(new YamlScalarNode("description"), scalarNode));
+    }
 }
 
 public class ConventionParser {
-    private int yamlConventionCount = 0;
-
     public static Convention ParseConventionsAt(string path, List<Macro> globalMacros) {
         YamlMappingNode? yamlRoot;
         using (var stream = new FileStream(path, FileMode.Open)) {
@@ -98,6 +100,7 @@ public class ConventionParser {
         if (parent == null) {
             parent = new Convention(null, "");
             parent.Macros.AddRange(globalMacros ?? []);
+            impliedPass = false;
         }
 
         foreach (var yamlPair in yamlObject.Children) {
@@ -105,17 +108,19 @@ public class ConventionParser {
                 ("define", YamlMappingNode yamlMacros) => processMacros(yamlMacros),
                 ("conventions" or "-", YamlMappingNode yamlConventions) => processConventions(yamlConventions, false),
                 ("/", YamlMappingNode yamlConventions) => processConventions(yamlConventions, true),
-                ("description", _) => 0, // Handled by processConventionSingle
+                ("steps", YamlSequenceNode yamlSequence) => processSteps(yamlSequence),
+                ("-steps", YamlSequenceNode yamlSequence) => processSteps(yamlSequence, false),
+                ("description", YamlScalarNode yamlDescription) => processYamlDescription(yamlDescription) , // Handled by processConventionSingle
                 (string biddingSequence, YamlScalarNode yamlDescription) =>
                     processConventionSingle(
                         [biddingSequence],
-                        new YamlMappingNode(new KeyValuePair<YamlNode, YamlNode>(new YamlScalarNode("description"), yamlDescription))
+                        yamlDescription.CreateDescriptionMapping()
                     ),
                 (string biddingSequence, YamlMappingNode yamlDict) => processConventionSingle([biddingSequence], yamlDict),
                 _ when yamlPair.Key is YamlSequenceNode biddingSequences && yamlPair.Value is YamlScalarNode yamlDescription => 
                     processConventionSingle(
                         biddingSequences.Cast<YamlScalarNode>().Select(s => s.Value ?? "").ToList(), 
-                        new YamlMappingNode(new KeyValuePair<YamlNode, YamlNode>(new YamlScalarNode("description"), yamlDescription))
+                        yamlDescription.CreateDescriptionMapping()
                     ),
                 _ when yamlPair.Key is YamlSequenceNode biddingSequences && yamlPair.Value is YamlMappingNode yamlDict => 
                     processConventionSingle(biddingSequences.Cast<YamlScalarNode>().Select(s => s.Value ?? "").ToList(), yamlDict),
@@ -136,6 +141,28 @@ public class ConventionParser {
             return 0;
         }
 
+        int processSteps(YamlSequenceNode steps, bool impliedPass = true) {
+            foreach (var step in steps) {
+                YamlMappingNode? yamlStep = step as YamlMappingNode;
+                if (step is YamlScalarNode yamlScalar) {
+                    yamlStep = yamlScalar.CreateDescriptionMapping(); 
+                }
+                if (yamlStep == null) {
+                    continue;
+                }
+
+                var stepConvention = new Convention(null, "");
+                FromYamlObject(yamlStep, null, stepConvention, true);
+
+                var stepTarget = impliedPass ? parent.GetConvention([BidType.Pass], true) : parent;
+                if (stepTarget != null) {
+                    stepTarget.Steps.Add(stepConvention);
+                }
+            }
+
+            return 0;
+        }
+
         int processConventionSingle(List<string> biddingSequences, YamlMappingNode yamlValue) {
             var seqeunces = biddingSequences.Select(seq => seq.Replace("/", "-P-"). Replace(" ", "").TrimStart('-').Split('-').ToList()).ToList();
 
@@ -149,14 +176,18 @@ public class ConventionParser {
                     continue;
                 }
 
-                child.Priority = yamlConventionCount++;
+                child.Priority = yamlValue.Start.Line;
 
-                if (yamlValue.TryGetChild<YamlScalarNode>("description") is { } yamlScalarNode) {
-                    child.Description = yamlScalarNode.Value;
-                }
-
-                FromYamlObject(yamlValue, globalMacros, child, false);
+                // imply pass by default when recursing children
+                FromYamlObject(yamlValue, globalMacros, child, true);
             }
+
+            return 0;
+        }
+
+        int processYamlDescription(YamlScalarNode yamlScalar) {
+            parent.Description = yamlScalar.Value;
+            parent.Priority = yamlScalar.Start.Line;
 
             return 0;
         }

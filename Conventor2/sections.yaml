@@ -1,8 +1,8 @@
 define:
-    "\\sC(\\b|\\.)": <span class="club-suit">C</span> 
-    "\\sD(\\b|\\.)": <span class="diamond-suit">D</span>
-    "\\sH(\\b|\\.)": <span class="heart-suit">H</span>
-    "\\sS(\\b|\\.)": <span class="spade-suit">S</span>
+    "\\sC(\\b|\\.|\\,)": <span class="club-suit">C</span> 
+    "\\sD(\\b|\\.|\\,)": <span class="diamond-suit">D</span>
+    "\\sH(\\b|\\.|\\,)": <span class="heart-suit">H</span>
+    "\\sS(\\b|\\.|\\,)": <span class="spade-suit">S</span>
 
     "(\\s|^)Natural": "**Natural**"
     "(\\s|^)Artificial": "~~Artificial~~"

@@ -1,83 +1,73 @@
 ﻿using HeyRed.MarkdownSharp;
 using Microsoft.AspNetCore.Html;
-using System;
-using System.Collections;
-using System.Collections.Generic;
-using System.Collections.Immutable;
-using System.Diagnostics;
-using System.Linq;
-using System.Text;
-using System.Text.RegularExpressions;
-using System.Threading.Tasks;
 
 namespace Conventor2;
 
 public class Convention {
     public Convention? Parent { get; set; }
 
-    public string BiddingSequence {
+    public List<BidType> BiddingSequence {
         get {
-            var parentSequence = Parent?.BiddingSequence;
-            if (string.IsNullOrEmpty(parentSequence)) {
-                return BidString;
+            List<BidType> sequence = [];
+
+            var cur = this;
+            while (cur != null) {
+                if (cur.Bid != null) {
+                    sequence.Insert(0, cur.Bid ?? BidType.Pass);
+                }
+                cur = cur.Parent;
             }
 
-            return $"{parentSequence}-{BidString}";
+            return sequence;
         }
+    }
+
+    public Convention(Convention? parent, BidType bid) {
+        Parent = parent;
+        RawBid = bid.ToString();
+        Bid = bid;
+
+        AlertTag = null;
+        IsAlertable = false;
+        IsAnnouncable = false;
     }
 
     public Convention(Convention? parent, string bid) {
         Parent = parent;
         RawBid = bid;
 
-        BidString = BidParser.ParseBid(bid, out var alertTag, out var bidSuit, out var bidLevel, out var isAlertable, out var isAnnouncable);
+        Bid = BidParser.ParseBid(bid, out var alertTag, out var isAlertable, out var isAnnouncable);
 
         AlertTag = alertTag;
-        BidSuit = bidSuit;
-        BidLevel = bidLevel;
         IsAlertable = isAlertable;
         IsAnnouncable = isAnnouncable;
     }
 
-    public string BidString { get; private init; }
-
-    public string BidSuit { get; private init; }
-
     public string RawBid { get; private init; }
 
-    public string AlertTag { get; private init; }
+    public string? AlertTag { get; private init; }
 
-    public int BidLevel { get; private init; }
+    public BidType? Bid { get; private init;  }
 
-    public Bid Bid {
-        get {
-            return (BidLevel, BidSuit) switch {
-                (_, "P") => Bid.Pass,
-                (_, "X") => Bid.Double,
-                (_, "XX") => Bid.Redouble,
-                (var level, "C") => new Bid(level, ContractStrain.Clubs),
-                (var level, "D") => new Bid(level, ContractStrain.Diamonds),
-                (var level, "H") => new Bid(level, ContractStrain.Hearts),
-                (var level, "S") => new Bid(level, ContractStrain.Spades),
-                (var level, "NT") => new Bid(level, ContractStrain.NoTrump),
-                _ => Bid.Pass,
-            };
-        }
-    }
-
+    // TODO: Move into bid.cs?
     public HtmlString HumanReadableBid { 
         get {
+            if (this.Bid == null) {
+                return new HtmlString("NULLBID");
+            }
+
+            var Bid = this.Bid ?? BidType.Pass;
             var alertSuffix = string.IsNullOrEmpty(AlertTag) ? "" : $" ({AlertTag})";
-            var bidString = BidSuit switch {
-                "P" => $"P{alertSuffix}",
-                "X" => $"X{alertSuffix}",
-                "XX" => $"XX{alertSuffix}",
-                "C" => $"{BidLevel}<span class=\"club-suit\">C</span>{alertSuffix}",
-                "D" => $"{BidLevel}<span class=\"diamond-suit\">D</span>{alertSuffix}",
-                "H" => $"{BidLevel}<span class=\"heart-suit\">H</span>{alertSuffix}",
-                "S" => $"{BidLevel}<span class=\"spade-suit\">S</span>{alertSuffix}",
-                "NT" => $"{BidLevel}NT{alertSuffix}",
-                _ => BidString,
+            var bidString = Bid.Strain switch {
+                ContractStrain.None when Bid.IsPass => $"P{alertSuffix}",
+                ContractStrain.None when Bid.IsDouble => $"X{alertSuffix}",
+                ContractStrain.None when Bid.IsRedouble => $"XX{alertSuffix}",
+                ContractStrain.Clubs => $"{Bid.Level}<span class=\"club-suit\">C</span>{alertSuffix}",
+                ContractStrain.Diamonds => $"{Bid.Level}<span class=\"diamond-suit\">D</span>{alertSuffix}",
+                ContractStrain.Hearts => $"{Bid.Level}<span class=\"heart-suit\">H</span>{alertSuffix}",
+                ContractStrain.Spades => $"{Bid.Level}<span class=\"spade-suit\">S</span>{alertSuffix}",
+                ContractStrain.NoTrump => $"{Bid.Level}NT{alertSuffix}",
+                _ => Bid.UnexpandedBid,
             };
 
             if (IsAlertable) {
@@ -95,19 +85,6 @@ public class Convention {
     public bool IsAnnouncable { get; private set; }   
 
     public int Priority { get; set; } = 0;
-    
-    public int SortOrder => BidSuit switch {
-        "P" => 0,
-        "X" => 1,
-        "XX" => 2,
-        "C" => (BidLevel * 10) + 1,
-        "D" => (BidLevel * 10) + 2,
-        "H" => (BidLevel * 10) + 3,
-        "S" => (BidLevel * 10) + 4,
-        "NT" => (BidLevel * 10) + 5,
-        _ => -1,
-    };
-
 
     public string? Description { get; set; } = null;
 
@@ -133,7 +110,7 @@ public class Convention {
                     tempDescription = macro.Apply(tempDescription);
                 }
 
-                tempDescription = tempDescription.Replace($"${depth}", current.BidSuit);
+                tempDescription = tempDescription.Replace($"${depth}", current.Bid?.Strain.ToShortString());
 
                 current = current.Parent;
                 depth++;
@@ -147,9 +124,11 @@ public class Convention {
         }
     }
 
-    public Dictionary<string, Convention> Children { get; set; } = new Dictionary<string, Convention>();
+    public Dictionary<BidType, Convention> Children { get; set; } = [];
 
-    public List<Macro> Macros { get; set; } = new List<Macro>();
+    public List<Convention> Steps { get; set; } = [];
+
+    public List<Macro> Macros { get; set; } = [];
 
     private void MergeTo(Convention other) {
         if (!string.IsNullOrEmpty(Description)) {
@@ -159,14 +138,21 @@ public class Convention {
                 other.Priority = Priority;
                 other.IsAlertable = IsAlertable;
                 other.IsAnnouncable = IsAnnouncable;
-            } else {
-                // debug
-                Debug.Print("test");
+            }
+        }
+
+        if (Steps.Count != 0) {
+            if (this.Priority > other.Priority || other.Steps.Count == 0) {
+                other.Steps = new(Steps);
             }
         }
 
         foreach (var macro in Macros) {
             // Add instead of insert - expanded macros always take lower precedence than anything already defined.
+            if (other.Macros.Contains(macro)) {
+                continue;
+            }
+
             other.Macros.Add(macro); 
         }
 
@@ -181,21 +167,42 @@ public class Convention {
     }
 
     public Convention? GetConvention(IEnumerable<string> biddingSequence, bool create = false) {
-        var rawBid = biddingSequence.FirstOrDefault();
-        var parsedBid = BidParser.ParseBid(rawBid ?? "");
-        if (string.IsNullOrEmpty(rawBid)) {
+        if (!biddingSequence.Any()) {
             return this;
         }
 
-        if (!Children.ContainsKey(parsedBid)) {
+        var rawBid = biddingSequence.First();
+        var parsedBid = BidParser.ParseBid(rawBid);
+        if (parsedBid == null) {
+            return this;
+        }
+
+        if (!Children.ContainsKey(parsedBid.GetValueOrDefault())) {
             if (!create) {
                 return null;
             }
 
-            Children[parsedBid] = new Convention(this, rawBid);
+            Children[parsedBid.GetValueOrDefault()] = new Convention(this, rawBid);
         }
 
-        return Children[parsedBid].GetConvention(biddingSequence.Skip(1), create);
+        return Children[parsedBid.GetValueOrDefault()].GetConvention(biddingSequence.Skip(1), create);
+    }
+
+    public Convention? GetConvention(IEnumerable<BidType> biddingSequence, bool create = false) {
+        if (!biddingSequence.Any()) {
+            return this;
+        }
+
+        var bid = biddingSequence.First();
+        if (!Children.ContainsKey(bid)) {
+            if (!create) {
+                return null;
+            }
+
+            Children[bid] = new Convention(this, bid);
+        }
+
+        return Children[bid].GetConvention(biddingSequence.Skip(1), create);
     }
 
     public void FullyExpandChildren() {
@@ -208,6 +215,8 @@ public class Convention {
         foreach (var expansion in statefulExpansions) {
             expansion.MergeTo(this);
         }
+
+        ExpandSteps_();
     }
 
     private Convention Expanded(Expander[] expanders) {
@@ -221,12 +230,23 @@ public class Convention {
         copy.Description = Description;
         copy.Priority = Priority;
         copy.Macros.AddRange(Macros);
-        copy.Macros.AddRange(addedMacros);
+
+        foreach (var addedMacro in addedMacros) {
+            if (copy.Macros.Contains(addedMacro)) {
+                continue;
+            }
+
+            copy.Macros.Add(addedMacro);
+        }
 
         foreach (var (key, child) in Children) {
             var expandedChild = child.Expanded(expanders);
 
-            expandedChild.MergeTo(copy.GetConvention([expandedChild.BidString], true)!);
+            expandedChild.MergeTo(copy.GetConvention([expandedChild.RawBid], true)!);
+        }
+
+        foreach (var step in Steps) {
+            copy.Steps.Add(step.Expanded(expanders));
         }
 
         return copy;
@@ -239,6 +259,10 @@ public class Convention {
             Children.Remove(key);
 
             foreach (var expansion in expansions) {
+                if (string.IsNullOrEmpty(expansion)) {
+                    continue;
+                }
+
                 var newChild = GetConvention([expansion], true);
                 if (newChild == null) {
                     continue;
@@ -248,6 +272,35 @@ public class Convention {
                 newChild.ExpandStateless_();
             }
         }
+
+        foreach (var step in Steps) {
+            step.ExpandStateless_();
+        }
+    }
+
+    private void ExpandSteps_() {
+        var currentBid = BiddingSequence.LastOrDefault(b => !b.IsPass || b.IsDouble || b.IsRedouble);
+
+        foreach (var step in Steps) {
+            currentBid = currentBid.NextStep();
+
+            var child = GetConvention([currentBid.ToString()], true);
+            if (child == null) { 
+                continue; 
+            }
+
+
+            step.MergeTo(child);
+            
+            // Assume all relay sequences are alertable.
+            child.IsAlertable = true;
+        }
+
+        Steps.Clear();
+
+        foreach (var (_, child) in Children) {
+            child.ExpandSteps_();
+        }
     }
 
     public void TrimIllegalSequences() {
@@ -255,14 +308,7 @@ public class Convention {
             var child = Children[childKey];
             child.TrimIllegalSequences();
 
-            var temp = child;
-            var biddingSequence = new List<Bid>();
-            while (temp.Parent != null) {
-                biddingSequence.Insert(0, temp.Bid);
-                temp = temp.Parent;
-            }
-
-            if (!biddingSequence.IsLegalBiddingSequence()) {
+            if (!child.BiddingSequence.IsLegalBiddingSequence()) {
                 Children.Remove(childKey);        
             } else if (string.IsNullOrEmpty(child.Description) && child.Children.Count == 0) {
                 Children.Remove(childKey);
