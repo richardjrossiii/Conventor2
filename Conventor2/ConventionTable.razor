@@ -8,7 +8,7 @@
 <table>
     @foreach (var childConvention in ChildConventions()) {
 		<tr ondblclick="details = this.getElementsByTagName('details')[0]; if (details.hasAttribute('open')) details.removeAttribute('open'); else details.setAttribute('open', ''); event.preventDefault(); event.stopImmediatePropagation();">
-			<td>
+			<td class="@(BiddingSequence.Count % 2 == 0 ? "even-bid" : "odd-bid")" open="true">
                 @RenderRawHTML(childConvention.HumanReadableBid)
 			</td>
 

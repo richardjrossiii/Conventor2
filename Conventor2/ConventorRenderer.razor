@@ -5,6 +5,24 @@
         <link rel="stylesheet" href="resources/style.css" />
     </head>
     <body>
+        <label>
+            <input 
+              type="checkbox" 
+              onchange="
+                Array.prototype.forEach.call(
+                  document.getElementsByClassName('odd-bid'), 
+                  (element) => {
+                    element.setAttribute('open', !event.currentTarget.checked);
+                  }
+                );
+                
+                event.preventDefault();
+                event.stopImmediatePropagation();
+              ">
+
+            Hide competitive auctions
+        </label>
+
         @foreach (var s in ConventorConfig.AllSections) {
             <h1>@s.Name</h1>
 
