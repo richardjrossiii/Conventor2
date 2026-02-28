@@ -1,4 +1,5 @@
 ﻿@namespace Conventor2
+@using Microsoft.AspNetCore.Html
 
 <html>
     <head>
@@ -24,13 +25,21 @@
         </label>
 
         @foreach (var s in ConventorConfig.AllSections) {
-            <h1>@s.Name</h1>
+            <h1>@RenderRawHTML(s.HumanReadableName)</h1>
 
             <p>
-                @s.Description
+                @RenderRawHTML(s.HumanReadableDescription)
             </p>
 
             <ConventionTable SectionName=@s.Name />
         }
     </body>
 </html>
+
+@code {
+    public RenderFragment RenderRawHTML(HtmlString? rawHTML) {
+        return builder => {
+            builder.AddMarkupContent(0, rawHTML?.Value ?? "");
+        };
+    }
+}
