@@ -110,6 +110,10 @@ public class ConventionParser {
             impliedPass = false;
         }
 
+        YamlSequenceNode? stepsSequence = null;
+        BidType? stepsStart = null;
+        bool stepsImpliedPass = false;
+
         foreach (var yamlPair in yamlObject.Children) {
             _ = ((yamlPair.Key as YamlScalarNode)?.Value, yamlPair.Value) switch {
                 ("define", YamlMappingNode yamlMacros) => processMacros(yamlMacros),
@@ -117,6 +121,7 @@ public class ConventionParser {
                 ("/", YamlMappingNode yamlConventions) => processConventions(yamlConventions, true),
                 ("steps", YamlSequenceNode yamlSequence) => processSteps(yamlSequence),
                 ("-steps", YamlSequenceNode yamlSequence) => processSteps(yamlSequence, false),
+                ("steps_start", YamlScalarNode steps_start) => processStepsStart(steps_start),
                 ("description", YamlScalarNode yamlDescription) => processYamlDescription(yamlDescription) , // Handled by processConventionSingle
                 (string biddingSequence, YamlScalarNode yamlDescription) =>
                     processConventionSingle(
@@ -134,6 +139,9 @@ public class ConventionParser {
                 _ => 0,
             };
         }
+
+        postProcessSteps();
+
         return parent;
 
         int processMacros(YamlMappingNode? yamlMacros) {
@@ -147,9 +155,24 @@ public class ConventionParser {
 
             return 0;
         }
+        
+        int processSteps(YamlSequenceNode yamlSteps, bool impliedPass = true) {
+            stepsSequence = yamlSteps;
+            stepsImpliedPass = impliedPass;
+            return 0;
+        };
 
-        int processSteps(YamlSequenceNode steps, bool impliedPass = true) {
-            foreach (var step in steps) {
+        int processStepsStart(YamlScalarNode value) {
+            stepsStart = BidParser.ParseBid(value.Value ?? "");
+            return 0;
+        }
+
+        int postProcessSteps() {
+            if (stepsSequence == null) {
+                return 0;
+            }
+
+            foreach (var step in stepsSequence) {
                 YamlMappingNode? yamlStep = step as YamlMappingNode;
                 if (step is YamlScalarNode yamlScalar) {
                     yamlStep = yamlScalar.CreateDescriptionMapping(); 
@@ -161,8 +184,10 @@ public class ConventionParser {
                 var stepConvention = new Convention(null, "");
                 FromYamlObject(yamlStep, null, stepConvention, true);
 
-                var stepTarget = impliedPass ? parent.GetConvention([BidType.Pass], true) : parent;
+                var stepTarget = stepsImpliedPass ? parent.GetConvention([BidType.Pass], true) : parent;
+
                 if (stepTarget != null) {
+                    stepTarget.StepsStart = stepsStart;
                     stepTarget.Steps.Add(stepConvention);
                 }
             }

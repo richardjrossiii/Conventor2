@@ -126,6 +126,8 @@ public class Convention {
 
     public Dictionary<BidType, Convention> Children { get; set; } = [];
 
+    public BidType? StepsStart { get; set; } = null;
+
     public List<Convention> Steps { get; set; } = [];
 
     public List<Macro> Macros { get; set; } = [];
@@ -279,7 +281,7 @@ public class Convention {
     }
 
     private void ExpandSteps_() {
-        var currentBid = BiddingSequence.LastOrDefault(b => !b.IsPass || b.IsDouble || b.IsRedouble);
+        var currentBid = StepsStart?.PreviousStep() ?? BiddingSequence.LastOrDefault(b => !b.IsPass || b.IsDouble || b.IsRedouble);
 
         foreach (var step in Steps) {
             currentBid = currentBid.NextStep();

@@ -46,6 +46,13 @@ public record struct BidType(int Level = 0, ContractStrain Strain = ContractStra
             Strain = Strain.Next()
         };
     }
+    public BidType PreviousStep() {
+        return this with
+        {
+            Level = Strain == ContractStrain.Clubs ? Level - 1 : Level,
+            Strain = Strain.Previous()
+        };
+    }
 
     public int CompareTo(BidType other) {
         if (Strain == ContractStrain.None) {
@@ -149,6 +156,18 @@ public static class BiddingExtensions
             ContractStrain.Hearts => ContractStrain.Spades,
             ContractStrain.Spades => ContractStrain.NoTrump,
             ContractStrain.NoTrump => ContractStrain.Clubs,
+            _ => ContractStrain.None,
+        };
+    }
+    public static ContractStrain Previous(this ContractStrain suit)
+    {
+        return suit switch
+        {
+            ContractStrain.Clubs => ContractStrain.NoTrump,
+            ContractStrain.Diamonds => ContractStrain.Clubs,
+            ContractStrain.Hearts => ContractStrain.Diamonds,
+            ContractStrain.Spades => ContractStrain.Hearts,
+            ContractStrain.NoTrump => ContractStrain.Spades,
             _ => ContractStrain.None,
         };
     }
